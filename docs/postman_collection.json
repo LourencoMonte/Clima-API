@@ -1,0 +1,205 @@
+{
+  "info": {
+    "name": "Clima API - N703",
+    "description": "Coleção de testes para a API de Agregação de Dados Climáticos e Geográficos",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "GET /health - Serviço saudável",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status healthy', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('healthy');",
+                  "  pm.expect(json.versao).to.exist;",
+                  "  pm.expect(json.timestamp).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Clima por Cidade",
+      "item": [
+        {
+          "name": "GET /clima/Fortaleza - Sucesso",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/clima/Fortaleza"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Campos obrigatórios presentes', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.nome).to.exist;",
+                  "  pm.expect(json.estado).to.exist;",
+                  "  pm.expect(json.clima).to.exist;",
+                  "  pm.expect(json.clima.temperatura_min).to.be.a('number');",
+                  "  pm.expect(json.clima.temperatura_max).to.be.a('number');",
+                  "  pm.expect(json.consultado_em).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /clima/SaoPaulo - Sucesso",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/clima/São Paulo"
+          }
+        },
+        {
+          "name": "GET /clima/CidadeInexistente - 404",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/clima/CidadeQueNaoExisteXYZ"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Erro CIDADE_NAO_ENCONTRADA', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.erro).to.be.true;",
+                  "  pm.expect(json.codigo).to.eql('CIDADE_NAO_ENCONTRADA');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /clima/X - 400 nome inválido",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/clima/X"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Erro NOME_INVALIDO', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.codigo).to.eql('NOME_INVALIDO');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cidades por Estado",
+      "item": [
+        {
+          "name": "GET /cidades/CE - Sucesso",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/cidades/CE?limite=5",
+              "query": [{ "key": "limite", "value": "5" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Campos obrigatórios', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.uf).to.eql('CE');",
+                  "  pm.expect(json.cidades).to.be.an('array');",
+                  "  pm.expect(json.quantidade_retornada).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /cidades/SP - Sucesso",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/cidades/SP"
+          }
+        },
+        {
+          "name": "GET /cidades/XX - 404 UF inexistente",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/cidades/XX"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Erro UF_NAO_ENCONTRADA', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.codigo).to.eql('UF_NAO_ENCONTRADA');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /cidades/ceara - 400 sigla inválida",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/cidades/ceara"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Erro SIGLA_UF_INVALIDA', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.codigo).to.eql('SIGLA_UF_INVALIDA');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
