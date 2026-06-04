@@ -7,6 +7,8 @@ import com.climaapi.exception.CidadeNaoEncontradaException;
 import com.climaapi.exception.ServicoExternoException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +25,8 @@ import java.util.List;
 @Service
 public class ClimaService {
 
+    private static final Logger logger = LoggerFactory.getLogger(ClimaService.class);
+
     @Value("${app.brasil-api.base-url}")
     private String brasilApiUrl;
 
@@ -36,43 +40,70 @@ public class ClimaService {
     // ENDPOINT 1: Clima por nome de cidade
     // -------------------------------------------------------
     public ClimaResponse buscarClimaPorCidade(String nomeCidade) {
-        // 1. Busca a cidade na Brasil API (CPTEC) para obter código e estado
-        JsonNode cidadeCptec = buscarCidadeCptec(nomeCidade);
+        logger.info("Buscando clima para a cidade: {}", nomeCidade);
 
-        String nomeOficial = cidadeCptec.get("nome").asText();
-        String estado = cidadeCptec.get("estado").asText();
-        int codigoCptec = cidadeCptec.get("id").asInt();
+        try {
+            // 1. Busca a cidade na Brasil API (CPTEC) para obter código e estado
+            JsonNode cidadeCptec = buscarCidadeCptec(nomeCidade);
 
-        // 2. Busca coordenadas via IBGE para usar no Open-Meteo
-        double[] coordenadas = buscarCoordenadasIBGE(nomeOficial, estado);
+            String nomeOficial = cidadeCptec.get("nome").asText();
+            String estado = cidadeCptec.get("estado").asText();
+            int codigoCptec = cidadeCptec.get("id").asInt();
 
-        // 3. Busca clima no Open-Meteo com lat/long dinâmico
-        ClimaResponse.ClimaInfo climaInfo = buscarClimaOpenMeteo(coordenadas[0], coordenadas[1]);
+            logger.debug("Cidade encontrada: {} ({})", nomeOficial, estado);
 
-        return new ClimaResponse(nomeOficial, estado, climaInfo);
+            // 2. Busca coordenadas via IBGE para usar no Open-Meteo
+            double[] coordenadas = buscarCoordenadasIBGE(nomeOficial, estado);
+            logger.debug("Coordenadas obtidas: lat={}, lon={}", coordenadas[0], coordenadas[1]);
+
+            // 3. Busca clima no Open-Meteo com lat/long dinâmico
+            ClimaResponse.ClimaInfo climaInfo = buscarClimaOpenMeteo(coordenadas[0], coordenadas[1]);
+
+            logger.info("Clima obtido com sucesso para {}: {}°C a {}°C",
+                    nomeOficial, climaInfo.getTemperaturaMin(), climaInfo.getTemperaturaMax());
+
+            return new ClimaResponse(nomeOficial, estado, climaInfo);
+        } catch (CidadeNaoEncontradaException e) {
+            logger.warn("Cidade não encontrada: {}", nomeCidade);
+            throw e;
+        } catch (Exception e) {
+            logger.error("Erro ao buscar clima para {}: {}", nomeCidade, e.getMessage(), e);
+            throw e;
+        }
     }
 
     // -------------------------------------------------------
     // ENDPOINT 2: Cidades por UF
     // -------------------------------------------------------
     public CidadesResponse listarCidadesPorUF(String uf, int limite) {
-        String url = brasilApiUrl + "/ibge/municipios/v1/" + uf.toUpperCase() + "?providers=dados-abertos-br,gov,wikipedia";
+        logger.info("Buscando cidades para UF: {} com limite: {}", uf, limite);
 
-        JsonNode resposta = chamarApi(url, "IBGE");
+        try {
+            String url = brasilApiUrl + "/ibge/municipios/v1/" + uf.toUpperCase()
+                    + "?providers=dados-abertos-br,gov,wikipedia";
 
-        if (resposta == null || !resposta.isArray() || resposta.size() == 0) {
-            throw new CidadeNaoEncontradaException(uf); // reutiliza a exception — UF inválida
+            JsonNode resposta = chamarApi(url, "IBGE");
+
+            if (resposta == null || !resposta.isArray() || resposta.size() == 0) {
+                logger.warn("UF não encontrada ou sem cidades: {}", uf);
+                throw new CidadeNaoEncontradaException(uf);
+            }
+
+            List<CidadesResponse.CidadeItem> cidades = new ArrayList<>();
+            int count = 0;
+            for (JsonNode municipio : resposta) {
+                if (count >= limite)
+                    break;
+                cidades.add(new CidadesResponse.CidadeItem(municipio.get("nome").asText()));
+                count++;
+            }
+
+            logger.info("Encontradas {} cidades para UF: {}", count, uf);
+            return new CidadesResponse(uf, cidades);
+        } catch (Exception e) {
+            logger.error("Erro ao buscar cidades para UF {}: {}", uf, e.getMessage());
+            throw e;
         }
-
-        List<CidadesResponse.CidadeItem> cidades = new ArrayList<>();
-        int count = 0;
-        for (JsonNode municipio : resposta) {
-            if (count >= limite) break;
-            cidades.add(new CidadesResponse.CidadeItem(municipio.get("nome").asText()));
-            count++;
-        }
-
-        return new CidadesResponse(uf, cidades);
     }
 
     // -------------------------------------------------------
@@ -104,7 +135,7 @@ public class ClimaService {
                 if (nome.equalsIgnoreCase(nomeCidade)) {
                     // Nem toda resposta inclui lat/long — fallback para Open-Meteo geocoding
                     if (municipio.has("latitude") && municipio.has("longitude")) {
-                        return new double[]{
+                        return new double[] {
                                 municipio.get("latitude").asDouble(),
                                 municipio.get("longitude").asDouble()
                         };
@@ -119,7 +150,8 @@ public class ClimaService {
 
     private double[] buscarCoordenadasOpenMeteoGeocoding(String nomeCidade) {
         String nomeEncoded = URLEncoder.encode(nomeCidade, StandardCharsets.UTF_8);
-        String url = "https://geocoding-api.open-meteo.com/v1/search?name=" + nomeEncoded + "&count=1&language=pt&format=json";
+        String url = "https://geocoding-api.open-meteo.com/v1/search?name=" + nomeEncoded
+                + "&count=1&language=pt&format=json";
 
         JsonNode resposta = chamarApi(url, "Open-Meteo Geocoding");
 
@@ -128,7 +160,7 @@ public class ClimaService {
         }
 
         JsonNode primeiro = resposta.get("results").get(0);
-        return new double[]{
+        return new double[] {
                 primeiro.get("latitude").asDouble(),
                 primeiro.get("longitude").asDouble()
         };
@@ -159,6 +191,8 @@ public class ClimaService {
 
     private JsonNode chamarApi(String url, String nomeServico) {
         try {
+            logger.debug("Chamando API externa: {} - URL: {}", nomeServico, url);
+
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Accept", "application/json")
@@ -166,11 +200,15 @@ public class ClimaService {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
+            logger.debug("Resposta de {}: HTTP {}", nomeServico, response.statusCode());
+
             if (response.statusCode() == 404) {
+                logger.debug("Recurso não encontrado em {}", nomeServico);
                 return null;
             }
 
             if (response.statusCode() >= 500) {
+                logger.error("Erro na API externa {}: HTTP {}", nomeServico, response.statusCode());
                 throw new ServicoExternoException(nomeServico,
                         new RuntimeException("HTTP " + response.statusCode()));
             }
@@ -180,18 +218,26 @@ public class ClimaService {
         } catch (ServicoExternoException e) {
             throw e;
         } catch (IOException | InterruptedException e) {
+            logger.error("Erro ao chamar {}: {}", nomeServico, e.getMessage());
             throw new ServicoExternoException(nomeServico, e);
         }
     }
 
     private String traduzirWeatherCode(int code) {
-        if (code == 0) return "Céu Limpo";
-        if (code <= 3) return "Parcialmente Nublado";
-        if (code <= 49) return "Nublado ou com Neblina";
-        if (code <= 67) return "Chuva";
-        if (code <= 77) return "Neve";
-        if (code <= 82) return "Aguaceiros";
-        if (code <= 99) return "Tempestade";
+        if (code == 0)
+            return "Céu Limpo";
+        if (code <= 3)
+            return "Parcialmente Nublado";
+        if (code <= 49)
+            return "Nublado ou com Neblina";
+        if (code <= 67)
+            return "Chuva";
+        if (code <= 77)
+            return "Neve";
+        if (code <= 82)
+            return "Aguaceiros";
+        if (code <= 99)
+            return "Tempestade";
         return "Indisponível";
     }
 }

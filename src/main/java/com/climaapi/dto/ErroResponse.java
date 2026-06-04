@@ -1,5 +1,7 @@
 package com.climaapi.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class ErroResponse {
 
     private boolean erro = true;
@@ -7,8 +9,12 @@ public class ErroResponse {
     private String mensagem;
 
     // Campo extra opcional (nome_informado, sigla_uf_informada, servico)
+    @JsonProperty("nome_informado")
     private String nomeInformado;
+
+    @JsonProperty("sigla_uf_informada")
     private String siglaUfInformada;
+
     private String servico;
 
     public ErroResponse(String codigo, String mensagem) {
@@ -53,11 +59,27 @@ public class ErroResponse {
     }
 
     // Getters
-    public boolean isErro() { return erro; }
-    public String getCodigo() { return codigo; }
-    public String getMensagem() { return mensagem; }
+    public boolean isErro() {
+        return erro;
+    }
 
-    public String getNomeInformado() { return nomeInformado; }
-    public String getSiglaUfInformada() { return siglaUfInformada; }
-    public String getServico() { return servico; }
+    public String getCodigo() {
+        return codigo;
+    }
+
+    public String getMensagem() {
+        return mensagem;
+    }
+
+    public String getNomeInformado() {
+        return nomeInformado;
+    }
+
+    public String getSiglaUfInformada() {
+        return siglaUfInformada;
+    }
+
+    public String getServico() {
+        return servico;
+    }
 }
